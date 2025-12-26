@@ -1,6 +1,6 @@
 const fs = require("fs-extra");
 const path = require("path");
-const poppler = require("pdf-poppler");
+const { fromPath } = require("pdf2pic");
 const archiver = require("archiver");
 
 exports.pdfToImages = async (req, res) => {
@@ -12,11 +12,18 @@ exports.pdfToImages = async (req, res) => {
     const outputDir = path.join("output", Date.now().toString());
     await fs.ensureDir(outputDir);
 
-    const options = { format: "png", out_dir: outputDir, out_prefix: "page", dpi: 300 };
-    await poppler.convert(pdfPath, options);
+    const converter = fromPath(pdfPath, {
+      density: 300,
+      saveFilename: "page",
+      savePath: outputDir,
+      format: "png",
+    });
 
-    const imageFiles = (await fs.readdir(outputDir)).filter(f => f.endsWith(".png"));
-    if (imageFiles.length === 0) throw new Error("No images generated");
+    const totalPages = req.body.pages ? Number(req.body.pages) : undefined;
+
+    const pages = await converter.bulk(totalPages || -1);
+    if (!pages || pages.length === 0)
+      throw new Error("Image conversion failed");
 
     const zipPath = `${outputDir}.zip`;
     const output = fs.createWriteStream(zipPath);
